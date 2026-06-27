@@ -4,20 +4,25 @@ import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 
 // ── Base de données ──────────────────────────────────────
-function getDb() {
-    const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false },
-        max: 5,
-    });
-    return drizzle(pool);
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+    max: 5,
+});
+
+async function query(sql, params = []) {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(sql, params);
+        return result;
+    } finally {
+        client.release();
+    }
 }
 
 // ── tRPC ─────────────────────────────────────────────────
@@ -35,8 +40,7 @@ const adminRouter = router({
             password: z.string().min(1),
         }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            const result = await db.execute(
+            const result = await query(
                 `SELECT * FROM admin_users WHERE email = $1 LIMIT 1`,
                 [input.email]
             );
@@ -78,28 +82,27 @@ const productRouter = router({
             limit: z.number().default(12),
         }).optional())
         .query(async ({ input }) => {
-            const db = getDb();
             const page = input?.page ?? 1;
             const limit = input?.limit ?? 12;
             const offset = (page - 1) * limit;
 
-            let query = `SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1`;
+            let sql = `SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1`;
             const params = [];
 
             if (input?.categoryId) {
                 params.push(input.categoryId);
-                query += ` AND p.category_id = $${params.length}`;
+                sql += ` AND p.category_id = $${params.length}`;
             }
             if (input?.search) {
                 params.push(`%${input.search}%`);
-                query += ` AND p.name ILIKE $${params.length}`;
+                sql += ` AND p.name ILIKE $${params.length}`;
             }
 
-            query += ` ORDER BY p.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+            sql += ` ORDER BY p.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
             params.push(limit, offset);
 
-            const result = await db.execute(query, params);
-            const countResult = await db.execute(`SELECT COUNT(*) as count FROM products`, []);
+            const result = await query(sql, params);
+            const countResult = await query(`SELECT COUNT(*) as count FROM products`);
             const total = parseInt(countResult.rows[0]?.count ?? "0");
 
             return {
@@ -110,9 +113,28 @@ const productRouter = router({
             };
         }),
 
+    getById: procedure
+        .input(z.object({ id: z.number() }))
+        .query(async ({ input }) => {
+            const result = await query(
+                `SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = $1 LIMIT 1`,
+                [input.id]
+            );
+            return result.rows[0] ?? null;
+        }),
+
+    getRelated: procedure
+        .input(z.object({ id: z.number(), categoryId: z.number() }))
+        .query(async ({ input }) => {
+            const result = await query(
+                `SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.category_id = $1 AND p.id != $2 ORDER BY p.created_at DESC LIMIT 4`,
+                [input.categoryId, input.id]
+            );
+            return result.rows;
+        }),
+
     count: procedure.query(async () => {
-        const db = getDb();
-        const result = await db.execute(`SELECT COUNT(*) as count FROM products`, []);
+        const result = await query(`SELECT COUNT(*) as count FROM products`);
         return parseInt(result.rows[0]?.count ?? "0");
     }),
 
@@ -126,8 +148,7 @@ const productRouter = router({
             sku: z.string().optional(),
         }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            await db.execute(
+            await query(
                 `INSERT INTO products (name, description, price, category_id, images, sku) VALUES ($1, $2, $3, $4, $5, $6)`,
                 [input.name, input.description ?? "", input.price, input.categoryId, JSON.stringify(input.images ?? []), input.sku ?? `SKU-${Date.now()}`]
             );
@@ -142,20 +163,20 @@ const productRouter = router({
             price: z.number().optional(),
             categoryId: z.number().optional(),
             images: z.array(z.string()).optional(),
+            sku: z.string().optional(),
         }))
         .mutation(async ({ input }) => {
-            const db = getDb();
             const { id, ...data } = input;
-            const sets = Object.keys(data).map((k, i) => `${k} = $${i + 2}`).join(", ");
-            await db.execute(`UPDATE products SET ${sets} WHERE id = $1`, [id, ...Object.values(data)]);
+            const keys = Object.keys(data);
+            const sets = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+            await query(`UPDATE products SET ${sets} WHERE id = $1`, [id, ...Object.values(data)]);
             return { success: true };
         }),
 
     delete: procedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            await db.execute(`DELETE FROM products WHERE id = $1`, [input.id]);
+            await query(`DELETE FROM products WHERE id = $1`, [input.id]);
             return { success: true };
         }),
 });
@@ -163,10 +184,8 @@ const productRouter = router({
 // ── Router catégories ─────────────────────────────────────
 const categoryRouter = router({
     list: procedure.query(async () => {
-        const db = getDb();
-        const result = await db.execute(
-            `SELECT c.*, COUNT(p.id) as product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name`,
-            []
+        const result = await query(
+            `SELECT c.*, COUNT(p.id) as product_count FROM categories c LEFT JOIN products p ON p.category_id = c.id GROUP BY c.id ORDER BY c.name`
         );
         return result.rows;
     }),
@@ -174,20 +193,21 @@ const categoryRouter = router({
     create: procedure
         .input(z.object({ name: z.string().min(1) }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            await db.execute(`INSERT INTO categories (name) VALUES ($1)`, [input.name]);
+            await query(`INSERT INTO categories (name) VALUES ($1)`, [input.name]);
             return { success: true };
         }),
 
     delete: procedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            const count = await db.execute(`SELECT COUNT(*) as count FROM products WHERE category_id = $1`, [input.id]);
+            const count = await query(
+                `SELECT COUNT(*) as count FROM products WHERE category_id = $1`,
+                [input.id]
+            );
             if (parseInt(count.rows[0]?.count ?? "0") > 0) {
                 throw new Error("Impossible de supprimer une catégorie avec des produits");
             }
-            await db.execute(`DELETE FROM categories WHERE id = $1`, [input.id]);
+            await query(`DELETE FROM categories WHERE id = $1`, [input.id]);
             return { success: true };
         }),
 });
@@ -200,15 +220,14 @@ const blogRouter = router({
             limit: z.number().default(9),
         }).optional())
         .query(async ({ input }) => {
-            const db = getDb();
             const page = input?.page ?? 1;
             const limit = input?.limit ?? 9;
             const offset = (page - 1) * limit;
-            const result = await db.execute(
+            const result = await query(
                 `SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
                 [limit, offset]
             );
-            const countResult = await db.execute(`SELECT COUNT(*) as count FROM blog_posts`, []);
+            const countResult = await query(`SELECT COUNT(*) as count FROM blog_posts`);
             const total = parseInt(countResult.rows[0]?.count ?? "0");
             return { items: result.rows, total, page, totalPages: Math.ceil(total / limit) };
         }),
@@ -216,9 +235,18 @@ const blogRouter = router({
     getById: procedure
         .input(z.object({ id: z.number() }))
         .query(async ({ input }) => {
-            const db = getDb();
-            const result = await db.execute(`SELECT * FROM blog_posts WHERE id = $1`, [input.id]);
+            const result = await query(`SELECT * FROM blog_posts WHERE id = $1`, [input.id]);
             return result.rows[0] ?? null;
+        }),
+
+    getRelated: procedure
+        .input(z.object({ id: z.number(), category: z.string().optional() }))
+        .query(async ({ input }) => {
+            const result = await query(
+                `SELECT * FROM blog_posts WHERE id != $1 ORDER BY created_at DESC LIMIT 3`,
+                [input.id]
+            );
+            return result.rows;
         }),
 
     create: procedure
@@ -229,19 +257,33 @@ const blogRouter = router({
             category: z.string().optional(),
         }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            await db.execute(
+            await query(
                 `INSERT INTO blog_posts (title, content, cover_image, category) VALUES ($1, $2, $3, $4)`,
                 [input.title, input.content, input.coverImage, input.category]
             );
             return { success: true };
         }),
 
+    update: procedure
+        .input(z.object({
+            id: z.number(),
+            title: z.string().optional(),
+            content: z.string().optional(),
+            coverImage: z.string().optional(),
+            category: z.string().optional(),
+        }))
+        .mutation(async ({ input }) => {
+            const { id, ...data } = input;
+            const keys = Object.keys(data);
+            const sets = keys.map((k, i) => `${k} = $${i + 2}`).join(", ");
+            await query(`UPDATE blog_posts SET ${sets} WHERE id = $1`, [id, ...Object.values(data)]);
+            return { success: true };
+        }),
+
     delete: procedure
         .input(z.object({ id: z.number() }))
         .mutation(async ({ input }) => {
-            const db = getDb();
-            await db.execute(`DELETE FROM blog_posts WHERE id = $1`, [input.id]);
+            await query(`DELETE FROM blog_posts WHERE id = $1`, [input.id]);
             return { success: true };
         }),
 });
