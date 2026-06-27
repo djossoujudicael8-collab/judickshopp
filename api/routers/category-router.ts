@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "../middleware";
-import { getDb } from "../queries/connection";
-import { categories, products } from "@db/schema";
+import { createRouter, publicQuery } from "../middleware.js";
+import { getDb } from "../queries/connection.js";
+import { categories, products } from "../../db/schema.js";
 import { eq, sql } from "drizzle-orm";
 
 export const categoryRouter = createRouter({
@@ -16,7 +16,6 @@ export const categoryRouter = createRouter({
       })
       .from(categories)
       .orderBy(categories.name);
-
     return result;
   }),
 
@@ -24,9 +23,7 @@ export const categoryRouter = createRouter({
     .input(z.object({ name: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      const result = await db.insert(categories).values({
-        name: input.name,
-      });
+      const result = await db.insert(categories).values({ name: input.name });
       return result;
     }),
 
@@ -34,13 +31,12 @@ export const categoryRouter = createRouter({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();
-      // Check if category has products
       const productCount = await db
         .select({ count: sql<number>`count(*)` })
         .from(products)
         .where(eq(products.categoryId, input.id));
 
-      if (productCount[0]?.count ?? 0 > 0) {
+      if ((productCount[0]?.count ?? 0) > 0) {
         throw new Error("Cannot delete category with existing products");
       }
 

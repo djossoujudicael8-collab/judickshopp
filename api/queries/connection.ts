@@ -1,8 +1,8 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { env } from "../lib/env";
-import * as schema from "@db/schema";
-import * as relations from "@db/relations";
+import { env } from "../lib/env.js";
+import * as schema from "../../db/schema.js";
+import * as relations from "../../db/relations.js";
 
 const fullSchema = { ...schema, ...relations };
 
@@ -13,7 +13,6 @@ export function getDb() {
     const pool = new Pool({
       connectionString: env.databaseUrl,
       ssl: { rejectUnauthorized: false },
-      // Limite les connexions simultanées (important en serverless)
       max: 5,
     });
     instance = drizzle(pool, { schema: fullSchema });

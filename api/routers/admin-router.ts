@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "../middleware";
-import { getDb } from "../queries/connection";
-import { adminUsers } from "@db/schema";
+import { createRouter, publicQuery } from "../middleware.js";
+import { getDb } from "../queries/connection.js";
+import { adminUsers } from "../../db/schema.js";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";

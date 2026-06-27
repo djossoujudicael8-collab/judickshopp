@@ -1,17 +1,15 @@
 import { z } from "zod";
-import { createRouter, publicQuery } from "../middleware";
-import { getDb } from "../queries/connection";
-import { blogPosts } from "@db/schema";
+import { createRouter, publicQuery } from "../middleware.js";
+import { getDb } from "../queries/connection.js";
+import { blogPosts } from "../../db/schema.js";
 import { eq, desc, sql } from "drizzle-orm";
 
 export const blogRouter = createRouter({
   list: publicQuery
-    .input(
-      z.object({
-        page: z.number().default(1),
-        limit: z.number().default(9),
-      }).optional()
-    )
+    .input(z.object({
+      page: z.number().default(1),
+      limit: z.number().default(9),
+    }).optional())
     .query(async ({ input }) => {
       const db = getDb();
       const { page, limit } = input ?? { page: 1, limit: 9 };
@@ -30,12 +28,7 @@ export const blogRouter = createRouter({
 
       const total = countResult[0]?.count ?? 0;
 
-      return {
-        items,
-        total,
-        page,
-        totalPages: Math.ceil(total / limit),
-      };
+      return { items, total, page, totalPages: Math.ceil(total / limit) };
     }),
 
   getById: publicQuery
@@ -47,7 +40,6 @@ export const blogRouter = createRouter({
         .from(blogPosts)
         .where(eq(blogPosts.id, input.id))
         .limit(1);
-
       return result[0] ?? null;
     }),
 
@@ -55,31 +47,22 @@ export const blogRouter = createRouter({
     .input(z.object({ id: z.number(), category: z.string().optional() }))
     .query(async ({ input }) => {
       const db = getDb();
-      const conditions = [sql`${blogPosts.id} != ${input.id}`];
-      
-      if (input.category) {
-        conditions.push(eq(blogPosts.category, input.category));
-      }
-
       const result = await db
         .select()
         .from(blogPosts)
-        .where(sql`${conditions.join(" AND ")}`)
+        .where(sql`${blogPosts.id} != ${input.id}`)
         .orderBy(desc(blogPosts.createdAt))
         .limit(3);
-
       return result;
     }),
 
   create: publicQuery
-    .input(
-      z.object({
-        title: z.string().min(2),
-        content: z.string().min(10),
-        coverImage: z.string().optional(),
-        category: z.string().optional(),
-      })
-    )
+    .input(z.object({
+      title: z.string().min(2),
+      content: z.string().min(10),
+      coverImage: z.string().optional(),
+      category: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const result = await db.insert(blogPosts).values({
@@ -92,15 +75,13 @@ export const blogRouter = createRouter({
     }),
 
   update: publicQuery
-    .input(
-      z.object({
-        id: z.number(),
-        title: z.string().min(2).optional(),
-        content: z.string().min(10).optional(),
-        coverImage: z.string().optional(),
-        category: z.string().optional(),
-      })
-    )
+    .input(z.object({
+      id: z.number(),
+      title: z.string().min(2).optional(),
+      content: z.string().min(10).optional(),
+      coverImage: z.string().optional(),
+      category: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const db = getDb();
       const { id, ...data } = input;
