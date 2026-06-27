@@ -1,0 +1,93 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.625rem;
+
+    /* JUDICKSHOP custom colors */
+    --cream: #fffef9;
+    --deep-umber: #3d2e22;
+    --muted-gold: #b8a18b;
+    --warm-sand: #f5f1eb;
+    --deep-rose: #c9a87c;
+    --light-border: #e8e4de;
+    --dark-border: #5a4a3a;
+    --success: #22c55e;
+    --danger: #ef4444;
+  }
+
+  .dark {
+    --background: 20 20% 8%;
+    --foreground: 40 20% 95%;
+    --card: 20 20% 12%;
+    --card-foreground: 40 20% 95%;
+    --popover: 20 20% 12%;
+    --popover-foreground: 40 20% 95%;
+    --primary: 40 20% 95%;
+    --primary-foreground: 20 20% 8%;
+    --secondary: 20 15% 18%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 20 15% 18%;
+    --muted-foreground: 30 10% 55%;
+    --accent: 20 15% 18%;
+    --accent-foreground: 40 20% 95%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 20 15% 18%;
+    --input: 20 15% 18%;
+    --ring: 30 20% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 400ms ease, color 400ms ease;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  ::selection {
+    background-color: rgba(184, 161, 139, 0.3);
+    color: #3d2e22;
+  }
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}

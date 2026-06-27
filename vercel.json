@@ -1,0 +1,11 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "/api"
+        }
+    ],
+    "buildCommand": "vite build",
+    "outputDirectory": "dist/public",
+    "framework": null
+}
